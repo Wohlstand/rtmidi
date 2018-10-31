@@ -3018,6 +3018,8 @@ void MidiInJack :: openPort( unsigned int portNumber, const std::string &portNam
   // Connecting to the output
   std::string name = getPortName( portNumber );
   jack_connect( data->client, name.c_str(), jack_port_name( data->port ) );
+
+  connected_ = true;
 }
 
 void MidiInJack :: openVirtualPort( const std::string &portName )
@@ -3094,6 +3096,8 @@ void MidiInJack :: closePort()
   if ( data->port == NULL ) return;
   jack_port_unregister( data->client, data->port );
   data->port = NULL;
+
+  connected_ = false;
 }
 
 void MidiInJack:: setClientName( const std::string& )
@@ -3229,6 +3233,8 @@ void MidiOutJack :: openPort( unsigned int portNumber, const std::string &portNa
   // Connecting to the output
   std::string name = getPortName( portNumber );
   jack_connect( data->client, jack_port_name( data->port ), name.c_str() );
+
+  connected_ = true;
 }
 
 void MidiOutJack :: openVirtualPort( const std::string &portName )
@@ -3315,6 +3321,8 @@ void MidiOutJack :: closePort()
 
   jack_port_unregister( data->client, data->port );
   data->port = NULL;
+
+  connected_ = false;
 }
 
 void MidiOutJack:: setClientName( const std::string& )
