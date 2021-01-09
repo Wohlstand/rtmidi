@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT(RtMidi, 3.0.0, gary@music.mcgill.ca, rtmidi)
+AC_INIT(RtMidi, 4.0.0, gary@music.mcgill.ca, rtmidi)
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_SRCDIR(RtMidi.cpp)
 AC_CONFIG_FILES([rtmidi-config rtmidi.pc Makefile tests/Makefile doc/Makefile doc/doxygen/Doxyfile])
@@ -18,7 +18,7 @@ AM_INIT_AUTOMAKE([1.14 -Wall -Werror foreign subdir-objects])
 #
 # If any interfaces have been removed since the last public release, then set
 # age to 0.
-m4_define([lt_current], 4)
+m4_define([lt_current], 5)
 m4_define([lt_revision], 0)
 m4_define([lt_age], 0)
 
@@ -139,10 +139,12 @@ required=" $systems "
 # User must specified with-* options for any unknown OS.
 AS_IF([test "x$systems" = "x"],
   AS_CASE([$host],
-    [*-*-linux*],    [systems="alsa jack"],
-    [*-apple*],      [systems="core jack"],
-    [*-mingw32*],    [systems="winmm winks jack"],
-    [*-mingw64*],    [systems="winmm winks jack"]
+    [*-*-linux*],         [systems="alsa jack"],
+    [*-*-gnu],            [systems="jack"],
+    [*-*-kfreebsd*-gnu],  [systems="jack"],
+    [*-apple*],           [systems="core jack"],
+    [*-mingw32*],         [systems="winmm winks jack"],
+    [*-mingw64*],         [systems="winmm winks jack"]
   ))
 
 # If any were specifically requested disabled, do it.
