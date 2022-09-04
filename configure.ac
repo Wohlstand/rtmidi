@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT(RtMidi, 4.0.0, gary@music.mcgill.ca, rtmidi)
+AC_INIT(RtMidi, 5.0.0, gary.scavone@mcgill.ca, rtmidi)
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_SRCDIR(RtMidi.cpp)
 AC_CONFIG_FILES([rtmidi-config rtmidi.pc Makefile tests/Makefile doc/Makefile doc/doxygen/Doxyfile])
@@ -18,7 +18,7 @@ AM_INIT_AUTOMAKE([1.14 -Wall -Werror foreign subdir-objects])
 #
 # If any interfaces have been removed since the last public release, then set
 # age to 0.
-m4_define([lt_current], 5)
+m4_define([lt_current], 6)
 m4_define([lt_revision], 0)
 m4_define([lt_age], 0)
 
@@ -30,9 +30,11 @@ AC_SUBST(SO_VERSION)
 AC_SUBST(LIBS)
 AC_SUBST(api)
 AC_SUBST(req)
+AC_SUBST(req_libs)
 
 api=""
 req=""
+req_libs=""
 
 # Fill GXX with something before test.
 GXX="no"
@@ -52,6 +54,10 @@ AS_IF(
 m4_ifdef([AM_MAINTAINER_MODE], [AM_MAINTAINER_MODE])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
+# standards version
+m4_include([m4/ax_cxx_compile_stdcxx.m4])
+AX_CXX_COMPILE_STDCXX(11, noext, mandatory)
+
 # configure flags
 AC_ARG_ENABLE([debug], [AS_HELP_STRING([--enable-debug], [enable various debugging output])])
 AC_ARG_WITH(jack, [AS_HELP_STRING([--with-jack], [choose JACK server support])])
@@ -59,6 +65,7 @@ AC_ARG_WITH(alsa, [AS_HELP_STRING([--with-alsa], [choose native ALSA sequencer A
 AC_ARG_WITH(core, [AS_HELP_STRING([--with-core], [ choose CoreMIDI API support (mac only)])])
 AC_ARG_WITH(winmm, [AS_HELP_STRING([--with-winmm], [ choose Windows MultiMedia (MM) API support (win32 only)])])
 AC_ARG_WITH(winks, [AS_HELP_STRING([--with-winks], [  choose kernel streaming support (win32 only)])])
+AC_ARG_WITH(webmidi, [AS_HELP_STRING([--with-webmidi], [  choose Web MIDI support])])
 
 
 # Checks for programs.
@@ -132,6 +139,7 @@ AS_IF([test "x$with_alsa"   = "xyes"], [systems="$systems alsa"])
 AS_IF([test "x$with_core"   = "xyes"], [systems="$systems core"])
 AS_IF([test "x$with_winmm"  = "xyes"], [systems="$systems winmm"])
 AS_IF([test "x$with_winks"  = "xyes"], [systems="$systems winks"])
+AS_IF([test "x$with_webmidi" = "xyes"], [systems="$systems webmidi"])
 AS_IF([test "x$with_dummy"  = "xyes"], [systems="$systems dummy"])
 required=" $systems "
 
@@ -153,6 +161,7 @@ AS_IF([test "x$with_alsa"   = "xno"], [systems=`echo $systems|tr ' ' \\\\n|grep 
 AS_IF([test "x$with_winmm"  = "xno"], [systems=`echo $systems|tr ' ' \\\\n|grep -v winmm`])
 AS_IF([test "x$with_winks"  = "xno"], [systems=`echo $systems|tr ' ' \\\\n|grep -v winks`])
 AS_IF([test "x$with_core"   = "xno"], [systems=`echo $systems|tr ' ' \\\\n|grep -v core`])
+AS_IF([test "x$with_webmidi" = "xno"], [systems=`echo $systems|tr ' ' \\\\n|grep -v webmidi`])
 AS_IF([test "x$with_dummy"  = "xno"], [systems=`echo $systems|tr ' ' \\\\n|grep -v dummy`])
 systems=" `echo $systems|tr \\\\n ' '` "
 
@@ -187,6 +196,7 @@ AS_CASE(["$systems"], [*" alsa "*], [
 AS_CASE(["$systems"], [*" core "*], [
   AC_CHECK_HEADER(CoreMIDI/CoreMIDI.h,
     [api="$api -D__MACOSX_CORE__"
+     req_libs="$req_libs -framework CoreMIDI -framework CoreAudio -framework CoreFoundation"
      need_pthread=yes
      found="$found CoreMIDI",
      LIBS="$LIBS -framework CoreMIDI -framework CoreFoundation -framework CoreAudio"],
@@ -212,6 +222,12 @@ AS_CASE(["$systems"], [*" winks "*], [
      found="$found kernel-streaming"
      api="$api -D__WINDOWS_WINKS__"
      LIBS="-lsetupapi -lksuser ${LIBS}"])
+])
+
+AS_CASE(["$systems"], [*" webmidi "*], [
+  AC_CHECK_HEADERS(emscripten.h,
+    [api="$api -D__WEB_MIDI_API__"
+     found="$found Web MIDI"])
 ])
 
 AS_IF([test -n "$need_ole32"], [LIBS="-lole32 $LIBS"])

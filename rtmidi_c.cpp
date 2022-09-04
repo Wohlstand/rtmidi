@@ -5,12 +5,12 @@
 
 /* Compile-time assertions that will break if the enums are changed in
  * the future without synchronizing them properly.  If you get (g++)
- * "error: ‘StaticAssert<b>::StaticAssert() [with bool b = false]’ is
- * private within this context", it means enums are not aligned. */
-template<bool b> class StaticAssert { private: StaticAssert() {} };
-template<> class StaticAssert<true>{ public: StaticAssert() {} };
-#define ENUM_EQUAL(x,y) StaticAssert<(int)x==(int)y>()
-class StaticAssertions { StaticAssertions() {
+ * "error: ‘StaticEnumAssert<b>::StaticEnumAssert() [with bool b = false]’
+ * is private within this context", it means enums are not aligned. */
+template<bool b> class StaticEnumAssert { private: StaticEnumAssert() {} };
+template<> class StaticEnumAssert<true>{ public: StaticEnumAssert() {} };
+#define ENUM_EQUAL(x,y) StaticEnumAssert<(int)x==(int)y>()
+class StaticEnumAssertions { StaticEnumAssertions() {
     ENUM_EQUAL( RTMIDI_API_UNSPECIFIED,     RtMidi::UNSPECIFIED );
     ENUM_EQUAL( RTMIDI_API_MACOSX_CORE,     RtMidi::MACOSX_CORE );
     ENUM_EQUAL( RTMIDI_API_LINUX_ALSA,      RtMidi::LINUX_ALSA );
@@ -42,7 +42,9 @@ class CallbackProxyUserData
   void *user_data;
 };
 
-extern "C" const enum RtMidiApi rtmidi_compiled_apis[]; // casting from RtMidi::Api[]
+#ifndef RTMIDI_SOURCE_INCLUDED
+    extern "C" const enum RtMidiApi rtmidi_compiled_apis[]; // casting from RtMidi::Api[]
+#endif
 extern "C" const unsigned int rtmidi_num_compiled_apis;
 
 /* RtMidi API */
@@ -132,17 +134,27 @@ unsigned int rtmidi_get_port_count (RtMidiPtr device)
     }
 }
 
-const char* rtmidi_get_port_name (RtMidiPtr device, unsigned int portNumber)
+int rtmidi_get_port_name (RtMidiPtr device, unsigned int portNumber, char * bufOut, int * bufLen)
 {
-    try {
-        std::string name = ((RtMidi*) device->ptr)->getPortName (portNumber);
-        return strdup (name.c_str ());
+    if (bufOut == nullptr && bufLen == nullptr) {
+        return -1;
+    }
 
+    std::string name;
+    try {
+        name = ((RtMidi*) device->ptr)->getPortName (portNumber);
     } catch (const RtMidiError & err) {
         device->ok  = false;
         device->msg = err.what ();
-        return "";
+        return -1;
     }
+
+    if (bufOut == nullptr) {
+        *bufLen = static_cast<int>(name.size()) + 1;
+        return 0;
+    }
+
+    return snprintf(bufOut, static_cast<size_t>(*bufLen), "%s", name.c_str());
 }
 
 /* RtMidiIn API */

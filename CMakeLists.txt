@@ -5,7 +5,12 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 # Define a C++ project.
-project(RtMidi LANGUAGES CXX)
+project(RtMidi LANGUAGES CXX C)
+
+# standards version
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Check for Jack (any OS)
 find_library(JACK_LIB jack)
@@ -65,7 +70,7 @@ foreach(_S ${CONFIGAC})
 endforeach()
 math(EXPR SO_current_minus_age "${SO_current} - ${SO_age}")
 set(SO_VER "${SO_current_minus_age}")
-set(FULL_VER "${SO_current_minus_age}.${SO_revision}.${SO_age}")
+set(FULL_VER "${SO_current_minus_age}.${SO_age}.${SO_revision}")
 
 # Read package version info from configure.ac
 set(R "AC_INIT\\(RtMidi, ([0-9\\.]+),.*\\)")
@@ -76,10 +81,13 @@ string(REGEX REPLACE ${R} "\\1" PACKAGE_VERSION ${CONFIGAC})
 # Init variables
 set(rtmidi_SOURCES RtMidi.cpp RtMidi.h rtmidi_c.cpp rtmidi_c.h)
 set(LINKLIBS)
+set(PUBLICLINKLIBS)
 set(INCDIRS)
 set(PKGCONFIG_REQUIRES)
+set(LIBS_REQUIRES)
 set(API_DEFS)
 set(API_LIST)
+set(PACKAGE_DEPENDENCIES)
 
 # Tweak API-specific configuration.
 
@@ -106,7 +114,7 @@ if(RTMIDI_API_JACK)
   check_symbol_exists(jack_port_rename ${jack_INCLUDEDIR}/jack/jack.h JACK_HAS_PORT_RENAME)
   set(CMAKE_REQUIRED_LIBRARIES ${tmp_CMAKE_REQUIRED_LIBRARIES})
   if(JACK_HAS_PORT_RENAME)
-    list(APPEND API_DEFS "JACK_HAS_PORT_RENAME")
+    list(APPEND API_DEFS "-DJACK_HAS_PORT_RENAME")
   endif()
 endif()
 
@@ -118,10 +126,11 @@ if(RTMIDI_API_ALSA)
     message(FATAL_ERROR "ALSA API requested but no ALSA dev libraries found")
   endif()
   list(APPEND INCDIRS ${ALSA_INCLUDE_DIR})
-  list(APPEND LINKLIBS ${ALSA_LIBRARY})
+  list(APPEND LINKLIBS ALSA::ALSA)
   list(APPEND PKGCONFIG_REQUIRES "alsa")
   list(APPEND API_DEFS "-D__LINUX_ALSA__")
   list(APPEND API_LIST "alsa")
+  list(APPEND PACKAGE_DEPENDENCIES "find_dependency(ALSA)")
 endif()
 
 # WinMM
@@ -133,12 +142,14 @@ endif()
 
 # CoreMIDI
 if(RTMIDI_API_CORE)
+  find_library(CORESERVICES_LIB CoreServices)
+  find_library(COREAUDIO_LIB CoreAudio)
+  find_library(COREMIDI_LIB CoreMIDI)
+  find_library(COREFOUNDATION_LIB CoreFoundation)
   list(APPEND API_DEFS "-D__MACOSX_CORE__")
   list(APPEND API_LIST "coremidi")
-  list(APPEND LINKLIBS "-framework CoreServices")
-  list(APPEND LINKLIBS "-framework CoreAudio")
-  list(APPEND LINKLIBS "-framework CoreMIDI")
-  list(APPEND LINKLIBS "-framework CoreFoundation")
+  list(APPEND LINKLIBS ${CORESERVICES_LIB} ${COREAUDIO_LIB} ${COREMIDI_LIB} ${COREFOUNDATION_LIB})
+  list(APPEND LIBS_REQUIRES "-framework CoreServices -framework CoreAudio -framework CoreMIDI -framework CoreFoundation")
   list(APPEND LINKFLAGS "-Wl,-F/Library/Frameworks")
 endif()
 
@@ -147,11 +158,11 @@ if (NEED_PTHREAD)
   find_package(Threads REQUIRED
     CMAKE_THREAD_PREFER_PTHREAD
     THREADS_PREFER_PTHREAD_FLAG)
-  list(APPEND LINKLIBS Threads::Threads)
+  list(APPEND PUBLICLINKLIBS Threads::Threads)
+  list(APPEND PACKAGE_DEPENDENCIES "find_dependency(Threads)")
 endif()
 
 # Create library targets.
-cmake_policy(SET CMP0042 OLD)
 set(LIB_TARGETS)
 
 # Use RTMIDI_BUILD_SHARED_LIBS / RTMIDI_BUILD_STATIC_LIBS if they
@@ -174,31 +185,33 @@ endif()
 list(APPEND LIB_TARGETS rtmidi)
 
 # Add headers destination for install rule.
-set_target_properties(rtmidi PROPERTIES PUBLIC_HEADER RtMidi.h
+set_property(TARGET rtmidi PROPERTY PUBLIC_HEADER RtMidi.h rtmidi_c.h)
+set_target_properties(rtmidi PROPERTIES
   SOVERSION ${SO_VER}
   VERSION ${FULL_VER})
-
-# Set include paths, populate target interface.
-target_include_directories(rtmidi PUBLIC
-  $<INSTALL_INTERFACE:include>
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
-  PRIVATE
-  ${INCDIRS})
-
-# Set compile-time definitions
-target_compile_definitions(rtmidi PRIVATE ${API_DEFS})
-target_compile_definitions(rtmidi PRIVATE RTMIDI_EXPORT)
-target_link_libraries(rtmidi ${LINKLIBS})
 
 # Set standard installation directories.
 include(GNUInstallDirs)
 
+# Set include paths, populate target interface.
+target_include_directories(rtmidi PRIVATE ${INCDIRS}
+                                  PUBLIC
+                                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+                                    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+
+# Set compile-time definitions
+target_compile_definitions(rtmidi PRIVATE ${API_DEFS})
+target_compile_definitions(rtmidi PRIVATE RTMIDI_EXPORT)
+target_link_libraries(rtmidi PUBLIC ${PUBLICLINKLIBS} 
+                             PRIVATE ${LINKLIBS})
+
 # Add tests if requested.
-include(CTest)
+option(RTMIDI_BUILD_TESTING "Build test programs" ON)
 if (NOT DEFINED RTMIDI_BUILD_TESTING OR RTMIDI_BUILD_TESTING STREQUAL "")
   set(RTMIDI_BUILD_TESTING ${BUILD_TESTING})
 endif()
 if (RTMIDI_BUILD_TESTING)
+  include(CTest)
   add_executable(cmidiin    tests/cmidiin.cpp)
   add_executable(midiclock  tests/midiclock.cpp)
   add_executable(midiout    tests/midiout.cpp)
@@ -206,8 +219,9 @@ if (RTMIDI_BUILD_TESTING)
   add_executable(qmidiin    tests/qmidiin.cpp)
   add_executable(sysextest  tests/sysextest.cpp)
   add_executable(apinames   tests/apinames.cpp)
+  add_executable(testcapi   tests/testcapi.c)
   list(GET LIB_TARGETS 0 LIBRTMIDI)
-  set_target_properties(cmidiin midiclock midiout midiprobe qmidiin sysextest apinames
+  set_target_properties(cmidiin midiclock midiout midiprobe qmidiin sysextest apinames testcapi
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY tests
                INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}
                LINK_LIBRARIES ${LIBRTMIDI})
@@ -223,7 +237,9 @@ message(STATUS "Compiling with support for: ${apilist}")
 
 # PkgConfig file
 string(REPLACE ";" " " req "${PKGCONFIG_REQUIRES}")
+string(REPLACE ";" " " req_libs "${LIBS_REQUIRES}")
 string(REPLACE ";" " " api "${API_DEFS}")
+set(prefix ${CMAKE_INSTALL_PREFIX})
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/rtmidi.pc.in" "rtmidi.pc" @ONLY)
 
 # Add install rule.
@@ -232,24 +248,13 @@ install(TARGETS ${LIB_TARGETS}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rtmidi)
 
 # Store the package in the user registry.
 export(PACKAGE RtMidi)
 
 # Set installation path for CMake files.
 set(RTMIDI_CMAKE_DESTINATION share/rtmidi)
-
-# Create CMake configuration export file.
-if(NEED_PTHREAD)
-  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/RtMidiConfig.cmake "find_package(Threads REQUIRED)\n")
-endif()
-
-file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/RtMidiConfig.cmake "include(\${CMAKE_CURRENT_LIST_DIR}/RtMidiTargets.cmake)")
-
-# Install CMake configuration export file.
-install(FILES ${CMAKE_BINARY_DIR}/RtMidiConfig.cmake
-        DESTINATION ${RTMIDI_CMAKE_DESTINATION})
 
 # Export library target (build-tree).
 export(EXPORT RtMidiTargets
@@ -272,3 +277,31 @@ add_custom_target(${RTMIDI_TARGETNAME_UNINSTALL}
 install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/rtmidi.pc
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+
+# Set up CMake package
+include(CMakePackageConfigHelpers)
+
+# Write cmake package version file
+write_basic_package_version_file(
+    rtmidi-config-version.cmake
+    VERSION ${FULL_VER}
+    COMPATIBILITY SameMajorVersion
+)
+
+string(REPLACE ";" "\n" package_dependencies "${PACKAGE_DEPENDENCIES}")
+
+# Write cmake package config file
+configure_package_config_file (
+    cmake/rtmidi-config.cmake.in
+    rtmidi-config.cmake
+    INSTALL_DESTINATION "${RTMIDI_CMAKE_DESTINATION}"
+)
+
+# Install package files
+install (
+    FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/rtmidi-config.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/rtmidi-config-version.cmake"
+    DESTINATION
+        "${RTMIDI_CMAKE_DESTINATION}"
+)
