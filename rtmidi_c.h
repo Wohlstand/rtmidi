@@ -65,6 +65,9 @@ enum RtMidiApi {
     RTMIDI_API_UNIX_JACK,      /*!< The Jack Low-Latency MIDI Server API. */
     RTMIDI_API_WINDOWS_MM,     /*!< The Microsoft Multimedia MIDI API. */
     RTMIDI_API_RTMIDI_DUMMY,   /*!< A compilable but non-functional API. */
+    RTMIDI_API_WEB_MIDI_API,   /*!< W3C Web MIDI API. */
+    RTMIDI_API_WINDOWS_UWP,    /*!< The Microsoft Universal Windows Platform MIDI API. */
+    RTMIDI_API_ANDROID,        /*!< The Android MIDI API. */
     RTMIDI_API_NUM             /*!< Number of values in this enum. */
 };
 
@@ -96,6 +99,11 @@ typedef void(* RtMidiCCallback) (double timeStamp, const unsigned char* message,
 
 
 /* RtMidi API */
+
+/*! \brief Return the current RtMidi version.
+ *! See \ref RtMidi::getVersion().
+*/
+RTMIDIAPI const char* rtmidi_get_version();
 
 /*! \brief Determine the available compiled MIDI APIs.
  *
