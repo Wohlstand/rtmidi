@@ -1116,6 +1116,8 @@ static void midiInputCallback( const MIDIPacketList *list, void *procRef, void *
                 std::cerr << "\nMidiInCore: message queue limit reached!!\n\n";
             }
             message.bytes.clear();
+            // All subsequent messages within same MIDI packet will have time delta 0
+            message.timeStamp = 0.0;
           }
           iByte += size;
         }
@@ -2087,7 +2089,9 @@ unsigned int portInfo( snd_seq_t *seq, snd_seq_port_info_t *pinfo, unsigned int 
            ( ( atyp & SND_SEQ_PORT_TYPE_APPLICATION ) == 0 ) ) continue;
 
       unsigned int caps = snd_seq_port_info_get_capability( pinfo );
-      if ( ( caps & type ) != type ) continue;
+      if ( ( ( caps & type ) != type ) ||
+           ( ( caps & SND_SEQ_PORT_CAP_NO_EXPORT ) != 0 ) ) continue;
+
       if ( count == portNumber ) return 1;
       ++count;
     }
