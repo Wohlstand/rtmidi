@@ -62,3 +62,8 @@
 
 # Go
 !/contrib/go/rtmidi/go.mod
+
+# OS Junk
+.DS_Store
+Thumbs.db*
+desktop.ini
