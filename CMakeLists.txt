@@ -36,7 +36,7 @@ if(WINDOWS)
 endif()
 
 # Build Options
-set(RTMIDI_TARGETNAME_UNINSTALL "uninstall" CACHE STRING "Name of 'uninstall' build target")
+set(RTMIDI_TARGETNAME_UNINSTALL "rt_uninstall" CACHE STRING "Name of 'uninstall' build target")
 
 # API Options
 option(RTMIDI_API_JACK "Compile with JACK support." ${HAVE_JACK})
@@ -44,6 +44,10 @@ option(RTMIDI_API_WINMM "Compile with WINMM support." ${WIN32})
 option(RTMIDI_API_CORE "Compile with CoreMIDI support." ${APPLE})
 option(RTMIDI_API_ALSA "Compile with ALSA support." ${ALSA})
 option(RTMIDI_API_AMIDI "Compile with Android support." ${ANDROID})
+
+# Module options
+option(RTMIDI_BUILD_MODULES "Build C++ modules for RtMidi" OFF)
+option(RTMIDI_USE_NAMESPACE "Force usage of namespace rt::midi for modules" ON)
 
 # Add -Wall if possible
 if (CMAKE_COMPILER_IS_GNUCXX)
@@ -118,15 +122,17 @@ if(RTMIDI_API_JACK)
 endif()
 
 # ALSA
-find_package(ALSA)
-if(ALSA_FOUND OR ALSA)
-  set(NEED_PTHREAD ON)
-  list(APPEND INCDIRS ${ALSA_INCLUDE_DIR})
-  list(APPEND LINKLIBS ALSA::ALSA)
-  list(APPEND PKGCONFIG_REQUIRES "alsa")
-  list(APPEND API_DEFS "-D__LINUX_ALSA__")
-  list(APPEND API_LIST "alsa")
-  list(APPEND PACKAGE_DEPENDENCIES "find_dependency(ALSA)")
+if(RTMIDI_API_ALSA)
+  find_package(ALSA)
+  if(ALSA_FOUND)
+    set(NEED_PTHREAD ON)
+    list(APPEND INCDIRS ${ALSA_INCLUDE_DIR})
+    list(APPEND LINKLIBS ALSA::ALSA)
+    list(APPEND PKGCONFIG_REQUIRES "alsa")
+    list(APPEND API_DEFS "-D__LINUX_ALSA__")
+    list(APPEND API_LIST "alsa")
+    list(APPEND PACKAGE_DEPENDENCIES "find_dependency(ALSA)")
+  endif()
 endif()
 
 # WinMM
@@ -150,7 +156,7 @@ if(RTMIDI_API_CORE)
 endif()
 
 # Android AMIDI
-if(ANDROID)
+if(RTMIDI_API_AMIDI)
   set(NEED_PTHREAD ON)
   set(JAVA_INCLUDE_PATH2 NotNeeded)
   set(JAVA_AWT_INCLUDE_PATH NotNeeded)
@@ -193,7 +199,7 @@ endif()
 list(APPEND LIB_TARGETS rtmidi)
 
 # Add headers destination for install rule.
-set_property(TARGET rtmidi PROPERTY PUBLIC_HEADER RtMidi.h rtmidi_c.h)
+set_property(TARGET rtmidi PROPERTY PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/RtMidi.h" "${CMAKE_CURRENT_SOURCE_DIR}/rtmidi_c.h")
 set_target_properties(rtmidi PROPERTIES
   SOVERSION ${SO_VER}
   VERSION ${FULL_VER})
@@ -212,6 +218,15 @@ target_compile_definitions(rtmidi PRIVATE ${API_DEFS})
 target_compile_definitions(rtmidi PRIVATE RTMIDI_EXPORT)
 target_link_libraries(rtmidi PUBLIC ${PUBLICLINKLIBS} 
                              PRIVATE ${LINKLIBS})
+
+if(RTMIDI_BUILD_MODULES)
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
+    message(STATUS "Building rtmidi C++ module")
+    add_subdirectory(modules)
+  else()
+    message(WARNING "Skipping rtmidi C++ module (requires CMake 3.28+, found ${CMAKE_VERSION})")
+  endif()
+endif()
 
 # Add tests if requested.
 option(RTMIDI_BUILD_TESTING "Build test programs" ON)
